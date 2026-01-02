@@ -244,6 +244,52 @@ func (r *routerImpl) Group(prefix string, m ...HandlerFunc) *group {
 	}
 }
 
+func (r *routerImpl) acquireCtx(w http.ResponseWriter, req *http.Request, h []HandlerFunc) *Context {
+	ctx := r.pool.Get().(*Context)
+	ctx.Writer = w
+	ctx.Request = req
+	ctx.handlers = h
+	ctx.index = -1
+	ctx.aborted = false
+	clear(ctx.params)
+	clear(ctx.data)
+
+	return ctx
+}
+
+func (r *routerImpl) releaseCtx(ctx *Context) {
+	ctx.handlers = nil
+	ctx.Writer = nil
+	ctx.Request = nil
+	r.pool.Put(ctx)
+}
+
+func (r *routerImpl) NotFound(handler HandlerFunc) {
+	if handler == nil {
+		handler = func(c *Context) {
+			c.Writer.WriteHeader(http.StatusNotFound)
+			c.Writer.Write([]byte("404 page not found\n"))
+		}
+	}
+	r.notFound = handler
+}
+
+func (r *routerImpl) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	handlers, params := r.search(req.Method, req.URL.Path)
+	if handlers == nil {
+		ctx := r.acquireCtx(w, req, []HandlerFunc{r.notFound})
+		ctx.Next()
+		r.releaseCtx(ctx)
+		return
+	}
+
+	ctx := r.acquireCtx(w, req, handlers)
+	maps.Copy(ctx.params, params)
+
+	ctx.Next()
+	r.releaseCtx(ctx)
+}
+
 func (g *group) collectMiddlewares() []HandlerFunc {
 	var mids []HandlerFunc
 	current := g
@@ -290,50 +336,4 @@ func (g *group) Group(sub string, m ...HandlerFunc) *group {
 		parent:      g,
 		router:      g.router,
 	}
-}
-
-func (r *routerImpl) acquireCtx(w http.ResponseWriter, req *http.Request, h []HandlerFunc) *Context {
-	ctx := r.pool.Get().(*Context)
-	ctx.Writer = w
-	ctx.Request = req
-	ctx.handlers = h
-	ctx.index = -1
-	ctx.aborted = false
-	clear(ctx.params)
-	clear(ctx.data)
-
-	return ctx
-}
-
-func (r *routerImpl) releaseCtx(ctx *Context) {
-	ctx.handlers = nil
-	ctx.Writer = nil
-	ctx.Request = nil
-	r.pool.Put(ctx)
-}
-
-func (r *routerImpl) NotFound(handler HandlerFunc) {
-	if handler == nil {
-		handler = func(c *Context) {
-			c.Writer.WriteHeader(http.StatusNotFound)
-			c.Writer.Write([]byte("404 page not found\n"))
-		}
-	}
-	r.notFound = handler
-}
-
-func (r *routerImpl) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	handlers, params := r.search(req.Method, req.URL.Path)
-	if handlers == nil {
-		ctx := r.acquireCtx(w, req, []HandlerFunc{r.notFound})
-		ctx.Next()
-		r.releaseCtx(ctx)
-		return
-	}
-
-	ctx := r.acquireCtx(w, req, handlers)
-	maps.Copy(ctx.params, params)
-
-	ctx.Next()
-	r.releaseCtx(ctx)
 }

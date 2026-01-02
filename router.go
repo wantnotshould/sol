@@ -5,8 +5,8 @@
 package sol
 
 import (
-	"maps"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -24,6 +24,7 @@ type router interface {
 
 	Group(prefix string, middlewares ...HandlerFunc) *group
 	Use(middlewares ...HandlerFunc)
+	NotFound(handler HandlerFunc)
 }
 
 // node represents a radix tree node.
@@ -41,6 +42,7 @@ type routerImpl struct {
 	// trees method -> root node
 	trees       map[string]*node
 	middlewares []HandlerFunc
+	notFound    HandlerFunc
 	pool        sync.Pool
 }
 
@@ -54,6 +56,10 @@ type group struct {
 func newRouter() router {
 	r := &routerImpl{
 		trees: make(map[string]*node),
+		notFound: func(c *Context) {
+			c.Writer.WriteHeader(http.StatusNotFound)
+			c.Writer.Write([]byte("404 page not found\n"))
+		},
 	}
 	r.pool.New = func() any {
 		return &Context{
@@ -306,10 +312,22 @@ func (r *routerImpl) releaseCtx(ctx *Context) {
 	r.pool.Put(ctx)
 }
 
+func (r *routerImpl) NotFound(handler HandlerFunc) {
+	if handler == nil {
+		handler = func(c *Context) {
+			c.Writer.WriteHeader(http.StatusNotFound)
+			c.Writer.Write([]byte("404 page not found\n"))
+		}
+	}
+	r.notFound = handler
+}
+
 func (r *routerImpl) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handlers, params := r.search(req.Method, req.URL.Path)
 	if handlers == nil {
-		http.NotFound(w, req)
+		ctx := r.acquireCtx(w, req, []HandlerFunc{r.notFound})
+		ctx.Next()
+		r.releaseCtx(ctx)
 		return
 	}
 

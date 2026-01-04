@@ -82,7 +82,7 @@ func formatListenURL(addr string, isTLS bool) string {
 }
 
 func (sl *Sol) Run(addr ...string) {
-	runAddr := ":1221"
+	runAddr := ":2615"
 
 	if len(addr) > 0 && addr[0] != "" {
 		runAddr = addr[0]

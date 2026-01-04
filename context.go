@@ -6,6 +6,8 @@ package sol
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -200,4 +202,29 @@ func (c *Context) Abort() {
 // IsAborted reports whether the handler chain has been aborted.
 func (c *Context) IsAborted() bool {
 	return c.aborted
+}
+
+func (c *Context) String(status int, format string, values ...any) {
+	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	c.Writer.WriteHeader(status)
+	msg := fmt.Sprintf(format, values...)
+	c.Writer.Write([]byte(msg))
+}
+
+func (c *Context) JSON(status int, obj any) {
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	c.Writer.WriteHeader(status)
+
+	data, err := json.Marshal(obj)
+	if err != nil {
+		http.Error(c.Writer, `{"error":"json marshal failed"}`, 500)
+		return
+	}
+	c.Writer.Write(data)
+}
+
+func (c *Context) HTML(status int, html string) {
+	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.Writer.WriteHeader(status)
+	c.Writer.Write([]byte(html))
 }

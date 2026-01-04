@@ -6,6 +6,7 @@ package binding
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -104,6 +105,32 @@ func JSON(c *sol.Context, obj any) error {
 
 	if err := json.Unmarshal(bodyBytes, obj); err != nil {
 		return fmt.Errorf("json unmarshal error: %w", err)
+	}
+
+	return nil
+}
+
+func XML(c *sol.Context, obj any) error {
+	contentType := c.Request.Header.Get("Content-Type")
+	lowerCT := strings.ToLower(contentType)
+	if !strings.Contains(lowerCT, "application/xml") && !strings.Contains(lowerCT, "text/xml") {
+		return fmt.Errorf("xml binding: Content-Type is not xml, got %s", contentType)
+	}
+
+	if c.Request.Body == nil {
+		return fmt.Errorf("xml binding: request body is nil")
+	}
+
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return fmt.Errorf("read request body error: %w", err)
+	}
+	if len(bodyBytes) == 0 {
+		return fmt.Errorf("xml binding: empty request body")
+	}
+
+	if err := xml.Unmarshal(bodyBytes, obj); err != nil {
+		return fmt.Errorf("xml unmarshal error: %w", err)
 	}
 
 	return nil

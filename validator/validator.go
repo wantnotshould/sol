@@ -20,7 +20,7 @@ func (v *Validator) ValidateStruct(obj any) ValidationErrors {
 	errs := make(ValidationErrors)
 
 	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 	if val.Kind() != reflect.Struct {
@@ -48,6 +48,22 @@ func (v *Validator) ValidateStruct(obj any) ValidationErrors {
 		}
 
 		rules := ParseTag(tag)
+
+		if fieldVal.Kind() == reflect.Struct {
+			nestedErrs := v.ValidateStruct(fieldVal.Interface())
+
+			if isEmpty(fieldVal.Interface()) {
+				errs.Add(fieldName, "This field is required")
+			}
+
+			for nestedField, nestedMessages := range nestedErrs {
+				for _, msg := range nestedMessages {
+					errs.Add(fieldName+"."+nestedField, msg)
+				}
+			}
+			continue
+		}
+
 		for _, rule := range rules {
 			if rule.Name == "required" && isEmpty(fieldVal.Interface()) {
 				errs.Add(fieldName, GetMessage("required", nil))
@@ -115,7 +131,7 @@ func isEmpty(value any) bool {
 	switch v := reflect.ValueOf(value); v.Kind() {
 	case reflect.String, reflect.Array, reflect.Map, reflect.Slice:
 		return v.Len() == 0
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return v.IsNil()
 	}
 	return false

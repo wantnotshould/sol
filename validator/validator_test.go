@@ -15,6 +15,18 @@ type User struct {
 	Email string `json:"email" validate:"required,email"`
 }
 
+type Address struct {
+	Street string `json:"street" validate:"required"`
+	City   string `json:"city" validate:"required"`
+}
+
+type UserAddress struct {
+	Name    string  `json:"name" validate:"required,len=5"`
+	Age     int     `json:"age" validate:"required,min=18,max=100"`
+	Email   string  `json:"email" validate:"required,email"`
+	Address Address `json:"address" validate:"required"`
+}
+
 func TestValidateStruct(t *testing.T) {
 	validator := New()
 
@@ -125,6 +137,71 @@ func TestRegexMatch(t *testing.T) {
 			result := isValidEmail(tt.email)
 			if result != tt.expected {
 				t.Errorf("expected %v for %s, but got %v", tt.expected, tt.email, result)
+			}
+		})
+	}
+}
+
+func TestValidateStructWithNested(t *testing.T) {
+	validator := New()
+
+	tests := []struct {
+		name     string
+		input    any
+		expected map[string][]string
+	}{
+		{
+			name: "valid user with address",
+			input: &UserAddress{
+				Name:  "Perry",
+				Age:   25,
+				Email: "perry@example.com",
+				Address: Address{
+					Street: "123 Main St",
+					City:   "Wonderland",
+				},
+			},
+			expected: map[string][]string{}, // 无错误
+		},
+		{
+			name: "missing required address",
+			input: &UserAddress{
+				Name:  "Perry",
+				Age:   25,
+				Email: "perry@example.com",
+			},
+			expected: map[string][]string{
+				"address.city":   {"This field is required"},
+				"address.street": {"This field is required"},
+			},
+		},
+		{
+			name: "invalid email and address",
+			input: &UserAddress{
+				Name:  "Perry",
+				Age:   25,
+				Email: "invalid-email",
+				Address: Address{
+					Street: "",
+					City:   "",
+				},
+			},
+			expected: map[string][]string{
+				"email":          {"This field must be a valid email address"},
+				"address.street": {"This field is required"},
+				"address.city":   {"This field is required"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validator.ValidateStruct(tt.input)
+			actual := map[string][]string{}
+			maps.Copy(actual, errs)
+
+			if !equalErrors(actual, tt.expected) {
+				t.Errorf("expected %v, but got %v", tt.expected, actual)
 			}
 		})
 	}
